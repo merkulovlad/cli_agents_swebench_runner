@@ -18,6 +18,31 @@ class CodexCodeInterface:
                 "Codex CLI not found. Please ensure 'codex' is installed and in PATH"
             )
 
+    def _build_env(self) -> Dict[str, str]:
+        """Build environment for Codex CLI.
+
+        Supports `api`/`API` as convenience aliases for `OPENAI_API_KEY`.
+        """
+        env = os.environ.copy()
+
+        api_key = env.get("api") or env.get("API")
+        if api_key and not env.get("OPENAI_API_KEY"):
+            env["OPENAI_API_KEY"] = api_key
+
+        has_api_key = bool(env.get("OPENAI_API_KEY"))
+        has_base_url = bool(env.get("OPENAI_BASE_URL"))
+
+        if has_api_key and has_base_url:
+            print("Codex CLI: using API key with custom OPENAI_BASE_URL")
+        elif has_api_key:
+            print("Codex CLI: using API key with default OpenAI endpoint")
+        elif has_base_url:
+            print("Codex CLI: using custom OPENAI_BASE_URL without API key override")
+        else:
+            print("Codex CLI: using default Codex authentication")
+
+        return env
+
     def execute_code_cli(self, prompt: str, cwd: str, model: str = None) -> Dict[str, any]:
         """Execute Codex via CLI and capture the response."""
         try:
@@ -32,6 +57,7 @@ class CodexCodeInterface:
                 capture_output=True,
                 text=True,
                 timeout=600,
+                env=self._build_env(),
             )
             os.chdir(original_cwd)
             return {

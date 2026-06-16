@@ -58,6 +58,28 @@ Before starting, ensure you have:
    # If not logged in, run the relevant CLI
    ```
 
+   The CLIs use their default authentication unless API environment variables are set. You can override API keys and endpoints before running the benchmark:
+   ```bash
+   # Claude Code
+   export ANTHROPIC_API_KEY="your-api-key"
+   export ANTHROPIC_BASE_URL="https://api.anthropic.com"
+
+   # Codex
+   export OPENAI_API_KEY="your-api-key"
+   export OPENAI_BASE_URL="https://api.openai.com/v1"
+
+   # Gemini
+   export GEMINI_API_KEY="your-api-key"
+   # GOOGLE_API_KEY is also respected if already set
+   ```
+
+   For convenience, this project also maps `api` or `API` to the selected backend's API key when that backend's key is not already set:
+   ```bash
+   export api="your-api-key"
+   # or
+   export API="your-api-key"
+   ```
+
 3. **Docker installed and running**
    ```bash
    docker --version  # Should show version
