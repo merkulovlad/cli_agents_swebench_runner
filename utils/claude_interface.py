@@ -24,6 +24,32 @@ class ClaudeCodeInterface:
                 "Claude CLI not found. Please ensure 'claude' is installed and in PATH"
             )
 
+    def _build_env(self) -> Dict[str, str]:
+        """Build environment for Claude Code CLI.
+
+        Supports `api`/`API` as convenience aliases for Claude Code's official
+        `ANTHROPIC_API_KEY` variable.
+        """
+        env = os.environ.copy()
+
+        api_key = env.get("api") or env.get("API")
+        if api_key and not env.get("ANTHROPIC_API_KEY"):
+            env["ANTHROPIC_API_KEY"] = api_key
+
+        has_api_key = bool(env.get("ANTHROPIC_API_KEY"))
+        has_base_url = bool(env.get("ANTHROPIC_BASE_URL"))
+
+        if has_api_key and has_base_url:
+            print("Claude Code: using API key with custom ANTHROPIC_BASE_URL")
+        elif has_api_key:
+            print("Claude Code: using API key with default Anthropic endpoint")
+        elif has_base_url:
+            print("Claude Code: using custom ANTHROPIC_BASE_URL without API key override")
+        else:
+            print("Claude Code: using default Claude Code authentication")
+
+        return env
+
     def execute_code_cli(self, prompt: str, cwd: str, model: str = None) -> Dict[str, any]:
         """Execute Claude Code via CLI and capture the response.
 
@@ -51,6 +77,7 @@ class ClaudeCodeInterface:
                 capture_output=True,
                 text=True,
                 timeout=600,  # 10 minute timeout
+                env=self._build_env(),
             )
 
             # Restore original directory
