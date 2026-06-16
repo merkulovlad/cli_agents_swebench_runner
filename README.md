@@ -58,6 +58,19 @@ Before starting, ensure you have:
    # If not logged in, run the relevant CLI
    ```
 
+   Claude Code uses its default authentication unless API environment variables are set. You can override the API key and endpoint before running the benchmark:
+   ```bash
+   export ANTHROPIC_API_KEY="your-api-key"
+   export ANTHROPIC_BASE_URL="https://api.anthropic.com"
+   ```
+
+   For convenience, this project also maps `api` or `API` to `ANTHROPIC_API_KEY` when `ANTHROPIC_API_KEY` is not already set:
+   ```bash
+   export api="your-api-key"
+   # or
+   export API="your-api-key"
+   ```
+
 3. **Docker installed and running**
    ```bash
    docker --version  # Should show version
