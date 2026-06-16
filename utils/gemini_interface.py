@@ -18,6 +18,28 @@ class GeminiCodeInterface:
                 "Gemini CLI not found. Please ensure 'gemini' is installed and in PATH"
             )
 
+    def _build_env(self) -> Dict[str, str]:
+        """Build environment for Gemini CLI.
+
+        Supports `api`/`API` as convenience aliases for `GEMINI_API_KEY`.
+        If `GOOGLE_API_KEY` is already set, it is left untouched.
+        """
+        env = os.environ.copy()
+
+        api_key = env.get("api") or env.get("API")
+        if api_key and not env.get("GEMINI_API_KEY") and not env.get("GOOGLE_API_KEY"):
+            env["GEMINI_API_KEY"] = api_key
+
+        has_gemini_key = bool(env.get("GEMINI_API_KEY"))
+        has_google_key = bool(env.get("GOOGLE_API_KEY"))
+
+        if has_gemini_key or has_google_key:
+            print("Gemini CLI: using API key from environment")
+        else:
+            print("Gemini CLI: using default Gemini authentication")
+
+        return env
+
     def execute_code_cli(self, prompt: str, cwd: str, model: str = None) -> Dict[str, any]:
         """Execute Gemini via CLI and capture the response.
 
@@ -42,6 +64,7 @@ class GeminiCodeInterface:
                 capture_output=True,
                 text=True,
                 timeout=600,  # 10 minute timeout
+                env=self._build_env(),
             )
 
             os.chdir(original_cwd)
