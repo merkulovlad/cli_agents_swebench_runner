@@ -251,7 +251,11 @@ class EnhancedBenchmarkRunner:
                     with open(json_path) as f:
                         data = json.load(f)
                     resolved = data.get("resolved_instances")
-                    total = data.get("total_instances") or len(predictions)
+                    total = (
+                        data.get("submitted_instances")
+                        or data.get("completed_instances")
+                        or len(predictions)
+                    )
                 except (OSError, json.JSONDecodeError) as exc:
                     logging.warning(f"Failed to parse evaluation JSON: {exc}")
 
