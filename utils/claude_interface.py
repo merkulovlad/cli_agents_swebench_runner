@@ -3,8 +3,10 @@ import json
 import subprocess
 from typing import Dict, List, Optional
 from dotenv import load_dotenv
+from utils.status import log_status
 
 load_dotenv()
+
 
 class ClaudeCodeInterface:
     """Interface for interacting with Claude Code CLI."""
@@ -66,11 +68,12 @@ class ClaudeCodeInterface:
             os.chdir(cwd)
 
             # Build command with optional model parameter
-            cmd = ["claude", "--dangerously-skip-permissions"]
+            cmd = ["claude", "-p", "--dangerously-skip-permissions"]
             if model:
                 cmd.extend(["--model", model])
 
             # Execute claude command with the prompt via stdin
+            log_status(f"Claude Code CLI started in {cwd}; waiting for model response")
             result = subprocess.run(
                 cmd,
                 input=prompt,
@@ -79,6 +82,7 @@ class ClaudeCodeInterface:
                 timeout=600,  # 10 minute timeout
                 env=self._build_env(),
             )
+            log_status(f"Claude Code CLI finished with exit code {result.returncode}")
 
             # Restore original directory
             os.chdir(original_cwd)

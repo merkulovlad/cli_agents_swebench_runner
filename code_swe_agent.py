@@ -21,10 +21,12 @@ import jsonlines
 from utils.claude_interface import ClaudeCodeInterface
 from utils.codex_interface import CodexCodeInterface
 from utils.gemini_interface import GeminiCodeInterface
+from utils.local_interface import LocalAgentInterface
 from utils.prompt_formatter import PromptFormatter
 from utils.patch_extractor import PatchExtractor
 from utils.model_registry import get_model_name
 from utils.dataset_registry import resolve_dataset_name
+from utils.status import log_status
 
 
 DEFAULT_BACKEND = os.environ.get("CODE_SWE_BACKEND", "claude")
@@ -35,12 +37,16 @@ class CodeSWEAgent:
 
     def __init__(self, prompt_template: Optional[str] = None,
                  model: Optional[str] = None,
-                 backend: str = DEFAULT_BACKEND):
+                 backend: str = DEFAULT_BACKEND,
+                 agent_command: Optional[str] = None,
+                 agent_timeout: int = 600):
         self.backend = (backend or DEFAULT_BACKEND).lower()
         if self.backend == "codex":
             self.interface = CodexCodeInterface()
         elif self.backend == "gemini":
             self.interface = GeminiCodeInterface()
+        elif self.backend == "local":
+            self.interface = LocalAgentInterface(agent_command, agent_timeout)
         else:
             self.backend = "claude"
             self.interface = ClaudeCodeInterface()
@@ -52,7 +58,7 @@ class CodeSWEAgent:
         self.predictions_dir = self.base_dir / "predictions"
 
         # Resolve model name from alias
-        self.model = get_model_name(model, self.backend) if model else None
+        self.model = get_model_name(model, self.backend) if model and self.backend != "local" else model
         self.model_alias = model  # Keep original alias for logging
 
         # Create directories if they don't exist
@@ -73,13 +79,14 @@ class CodeSWEAgent:
         try:
             # Remove if exists
             if temp_dir.exists():
+                log_status(f"{instance_id}: removing previous temp checkout at {temp_dir}")
                 shutil.rmtree(temp_dir)
 
             # Save current directory
             original_dir = Path.cwd()
             
             # Clone repository
-            print(f"Cloning {repo_name} to {temp_dir}")
+            log_status(f"{instance_id}: cloning {repo_name} to {temp_dir}")
             clone_url = f"https://github.com/{repo_name}.git"
             
             result = subprocess.run(
@@ -90,11 +97,12 @@ class CodeSWEAgent:
             )
             
             if result.returncode != 0:
-                print(f"Failed to clone repository: {result.stderr}")
+                log_status(f"{instance_id}: failed to clone repository: {result.stderr}")
                 return None
                 
             # Checkout base commit
             os.chdir(temp_dir)
+            log_status(f"{instance_id}: checking out base commit {base_commit[:12]}")
             result = subprocess.run(
                 ["git", "checkout", base_commit],
                 capture_output=True,
@@ -102,7 +110,7 @@ class CodeSWEAgent:
             )
             
             if result.returncode != 0:
-                print(f"Failed to checkout commit: {result.stderr}")
+                log_status(f"{instance_id}: failed to checkout commit: {result.stderr}")
                 os.chdir(str(original_dir))  # Return to original directory
                 return None
 
@@ -110,21 +118,22 @@ class CodeSWEAgent:
             return str(temp_dir)
             
         except Exception as e:
-            print(f"Error setting up repository: {e}")
+            log_status(f"{instance_id}: error setting up repository: {e}")
             # Try to return to original directory if possible
             try:
                 os.chdir(str(original_dir))
             except Exception as chdir_error:
-                print(f"Warning: Failed to return to original directory: {chdir_error}")
+                log_status(f"{instance_id}: warning: failed to return to original directory: {chdir_error}")
             return None
             
     def process_instance(self, instance: Dict) -> Dict:
         """Process a single SWE-bench instance."""
         instance_id = instance["instance_id"]
-        print(f"\nProcessing {instance_id}")
+        log_status(f"Processing {instance_id}")
 
         original_dir = os.getcwd()
 
+        log_status(f"{instance_id}: preparing repository")
         repo_path = self.setup_repository(instance)
         if not repo_path:
             return {
@@ -135,18 +144,20 @@ class CodeSWEAgent:
             }
 
         try:
+            log_status(f"{instance_id}: formatting prompt")
             prompt = self.prompt_formatter.format_for_cli(instance)
 
             os.chdir(repo_path)
+            log_status(f"{instance_id}: resetting workspace before model run")
             subprocess.run(["git", "add", "-A"], capture_output=True)
             subprocess.run(["git", "stash"], capture_output=True)
 
             model_info = f" with model {self.model_alias}" if self.model else ""
-            print(f"Running {self.backend.title()} Code{model_info}...")
+            log_status(f"{instance_id}: sending prompt to {self.backend.title()} Code{model_info}")
             result = self.interface.execute_code_cli(prompt, repo_path, self.model)
 
             if not result["success"]:
-                print(f"{self.backend.title()} Code execution failed: {result['stderr']}")
+                log_status(f"{instance_id}: {self.backend.title()} Code execution failed: {result['stderr']}")
                 os.chdir(original_dir)
                 return {
                     "instance_id": instance_id,
@@ -155,18 +166,22 @@ class CodeSWEAgent:
                     "error": f"Execution failed: {result['stderr']}",
                 }
 
+            log_status(f"{instance_id}: model response received; extracting patch")
             patch = self.patch_extractor.extract_from_cli_output(result["stdout"], repo_path)
 
             is_valid, error = self.patch_extractor.validate_patch(patch)
             if not is_valid:
-                print(f"Invalid patch: {error}")
+                log_status(f"{instance_id}: invalid patch: {error}")
                 patch = ""
+            else:
+                log_status(f"{instance_id}: patch extracted successfully ({len(patch)} chars)")
 
             prediction = self.patch_extractor.format_for_swebench(
                 patch, instance_id, self.model_alias or f"{self.backend}-code"
             )
 
             self._save_result(instance_id, result, patch)
+            log_status(f"{instance_id}: prediction saved")
 
             return prediction
 
@@ -184,9 +199,10 @@ class CodeSWEAgent:
             try:
                 os.chdir(original_dir)
             except Exception as e:
-                print(f"Warning: Could not restore directory: {e}")
+                log_status(f"{instance_id}: warning: could not restore directory: {e}")
 
             if repo_path and os.path.exists(repo_path):
+                log_status(f"{instance_id}: cleaning up temp checkout")
                 shutil.rmtree(repo_path)
     def _save_result(self, instance_id: str, result: Dict, patch: str):
         """Save detailed results for debugging."""
@@ -205,11 +221,14 @@ class CodeSWEAgent:
                       limit: Optional[int] = None) -> List[Dict]:
         """Run on a full dataset."""
         dataset_name = resolve_dataset_name(dataset_name)
-        print(f"Loading dataset: {dataset_name}")
+        log_status(f"Loading dataset {dataset_name} split={split}")
         dataset = load_dataset(dataset_name, split=split)
+        log_status(f"Loaded {len(dataset)} instances from {dataset_name}")
         
         if limit:
-            dataset = dataset.select(range(min(limit, len(dataset))))
+            selected = min(limit, len(dataset))
+            log_status(f"Selecting first {selected} instances")
+            dataset = dataset.select(range(selected))
             
         self.pred_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.pred_file = self.predictions_dir / f"predictions_{self.pred_timestamp}.jsonl"
@@ -221,17 +240,21 @@ class CodeSWEAgent:
 
         predictions: List[Dict] = []
 
-        for instance in tqdm(dataset, desc="Processing instances"):
+        total = len(dataset)
+        log_status(f"Writing incremental predictions to {self.pred_file}")
+        for index, instance in enumerate(tqdm(dataset, desc="Processing instances"), start=1):
+            log_status(f"Starting instance {index}/{total}: {instance['instance_id']}")
             prediction = self.process_instance(instance)
             predictions.append(prediction)
 
             # Save prediction incrementally
             self._save_predictions(prediction)
+            log_status(f"Finished instance {index}/{total}: {instance['instance_id']}")
 
         with open(json_file, 'w') as f:
             json.dump(predictions, f, indent=2)
 
-        print(f"Saved predictions to {self.pred_file}")
+        log_status(f"Saved predictions to {self.pred_file}")
         return predictions
     
     def run_on_instance(self, instance_id: str, dataset_name: str = "princeton-nlp/SWE-bench_Lite") -> Dict:
@@ -273,31 +296,47 @@ def main():
                        help="Path to custom prompt template")
     parser.add_argument("--model", type=str,
                        help="Model to use (e.g., opus-4.1, codex-4.2, or any name)")
-    parser.add_argument("--backend", type=str, choices=["claude", "codex", "gemini"],
+    parser.add_argument("--backend", type=str, choices=["claude", "codex", "gemini", "local"],
                        help="Code model backend to use")
+    parser.add_argument("--agent_command", "--agent-command", type=str,
+                       help="Local agent command to run when --backend local")
+    parser.add_argument("--agent_timeout", "--agent-timeout", type=int, default=600,
+                       help="Local agent timeout in seconds (default: 600)")
     
     args = parser.parse_args()
     
     backend = args.backend or DEFAULT_BACKEND
+    if backend == "local" and not args.agent_command:
+        print("Error: --agent-command is required when using --backend local")
+        sys.exit(1)
 
     # Check if selected CLI is available
-    if backend == "codex":
+    if backend == "local":
+        cli_cmd = None
+    elif backend == "codex":
         cli_cmd = "codex"
     elif backend == "gemini":
         cli_cmd = "gemini"
     else:
         cli_cmd = "claude"
 
-    try:
-        result = subprocess.run([cli_cmd, "--version"], capture_output=True, text=True)
-        if result.returncode != 0:
+    if cli_cmd:
+        try:
+            result = subprocess.run([cli_cmd, "--version"], capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"Error: {cli_cmd} CLI not found. Please ensure '{cli_cmd}' is installed and in PATH")
+                sys.exit(1)
+        except FileNotFoundError:
             print(f"Error: {cli_cmd} CLI not found. Please ensure '{cli_cmd}' is installed and in PATH")
             sys.exit(1)
-    except FileNotFoundError:
-        print(f"Error: {cli_cmd} CLI not found. Please ensure '{cli_cmd}' is installed and in PATH")
-        sys.exit(1)
 
-    agent = CodeSWEAgent(args.prompt_template, args.model, backend)
+    agent = CodeSWEAgent(
+        args.prompt_template,
+        args.model,
+        backend,
+        agent_command=args.agent_command,
+        agent_timeout=args.agent_timeout,
+    )
     
     # Run on specific instance or dataset
     if args.instance_id:

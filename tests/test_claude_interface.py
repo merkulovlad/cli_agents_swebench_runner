@@ -154,7 +154,7 @@ def test_execute_code_cli_calls_claude_with_expected_arguments():
     }
     expected = {
         "run_args": (
-            ["claude", "--dangerously-skip-permissions", "--model", "sonnet"],
+            ["claude", "-p", "--dangerously-skip-permissions", "--model", "sonnet"],
         ),
         "run_kwargs": {
             "input": "fix bug",
@@ -189,7 +189,7 @@ def test_execute_code_cli_calls_claude_without_model():
         "run_kwargs": run_mock.call_args.kwargs,
     }
     expected = {
-        "run_args": (["claude", "--dangerously-skip-permissions"],),
+        "run_args": (["claude", "-p", "--dangerously-skip-permissions"],),
         "run_kwargs": {
             "input": "fix bug",
             "capture_output": True,

@@ -19,7 +19,7 @@ def check_swebench_installed():
         import swebench
         return True
     except ImportError:
-        print("\n⚠️  SWE-bench module not found!")
+        print("\nWARN SWE-bench module not found!")
         print("To install SWE-bench for evaluation, run:")
         print("  pip install swebench")
         print("Or install from source:")
@@ -42,7 +42,13 @@ def run_command(args):
     runner = EnhancedBenchmarkRunner(
         model=args.model if hasattr(args, 'model') else None,
         backend=args.backend if hasattr(args, 'backend') and args.backend else DEFAULT_BACKEND,
+        agent_command=args.agent_command if hasattr(args, 'agent_command') else None,
+        agent_timeout=args.agent_timeout if hasattr(args, 'agent_timeout') else 600,
     )
+
+    if runner.backend == "local" and not runner.agent_command:
+        print("Error: --agent-command is required when using --backend local")
+        return 1
     
     # Set default limit if not specified
     if not args.limit:
@@ -77,7 +83,7 @@ def run_command(args):
     prediction_file, generation_time = runner.run_inference(args.dataset, args.limit)
     
     if not prediction_file:
-        print("❌ Failed to generate predictions")
+        print("ERROR Failed to generate predictions")
         runner.log_result(
             args.dataset, args.limit, 0.0, None, generation_time, 0,
             None, f"Failed to generate predictions. {args.notes}", "failed"
@@ -86,7 +92,7 @@ def run_command(args):
     
     # Calculate generation score
     generation_score, total_instances = runner.calculate_generation_score(prediction_file)
-    print(f"\n📈 Generation Score: {generation_score:.2f}% ({int(generation_score * total_instances / 100)}/{total_instances} patches generated)")
+    print(f"\nGeneration Score: {generation_score:.2f}% ({int(generation_score * total_instances / 100)}/{total_instances} patches generated)")
     
     # Run evaluation unless disabled
     evaluation_score = None
@@ -96,7 +102,7 @@ def run_command(args):
     if not args.no_eval:
         # Check if swebench is installed for evaluation
         if not check_swebench_installed():
-            print("\n⚠️  Skipping evaluation due to missing swebench module")
+            print("\nWARN Skipping evaluation due to missing swebench module")
             evaluation_status = "skipped"
             evaluation_score = None
             evaluation_time = 0
@@ -390,7 +396,9 @@ Examples:
     run_parser.add_argument('--max-workers', type=int, default=2, help='Max parallel Docker containers')
     run_parser.add_argument('--notes', default='', help='Optional notes about this run')
     run_parser.add_argument('--model', type=str, help='Model to use (e.g., opus-4.1, codex-4.2)')
-    run_parser.add_argument('--backend', type=str, choices=['claude', 'codex', 'gemini'], help='Code model backend')
+    run_parser.add_argument('--backend', type=str, choices=['claude', 'codex', 'gemini', 'local'], help='Code model backend')
+    run_parser.add_argument('--agent-command', dest='agent_command', help='Local agent command for --backend local')
+    run_parser.add_argument('--agent-timeout', dest='agent_timeout', type=int, default=600, help='Local agent timeout in seconds')
     
     # EVAL command
     eval_parser = subparsers.add_parser('eval', help='Evaluate past predictions')

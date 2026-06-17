@@ -9,6 +9,7 @@ import os
 import sys
 import subprocess
 import time
+import select
 from datetime import datetime
 from pathlib import Path
 import logging
@@ -16,8 +17,15 @@ import jsonlines
 from datasets import load_dataset
 from utils.dataset_registry import resolve_dataset_name
 
+
+def log_status(message):
+    """Print a timestamped status line immediately."""
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    print(f"[{timestamp}] {message}", flush=True)
+
+
 class EnhancedBenchmarkRunner:
-    def __init__(self, model=None, backend="claude"):
+    def __init__(self, model=None, backend="claude", agent_command=None, agent_timeout=600):
         self.base_dir = Path.cwd()
         self.log_file = self.base_dir / "benchmark_scores.log"
         self.predictions_dir = self.base_dir / "predictions"
@@ -25,6 +33,8 @@ class EnhancedBenchmarkRunner:
         self.eval_results_dir = self.base_dir / "evaluation_results"
         self.model = model
         self.backend = backend
+        self.agent_command = agent_command
+        self.agent_timeout = agent_timeout
         
         # Create directories
         self.predictions_dir.mkdir(exist_ok=True)
@@ -56,7 +66,7 @@ class EnhancedBenchmarkRunner:
         with open(self.log_file, 'a') as f:
             f.write(json.dumps(log_entry) + '\n')
         
-        print(f"\n✅ Results logged to {self.log_file}")
+        print(f"\nOK Results logged to {self.log_file}")
         if evaluation_status == "completed":
             print(f"   Generation Score: {generation_score:.2f}% (patches created)")
             print(f"   Evaluation Score: {evaluation_score:.2f}% (issues fixed) ← REAL SCORE")
@@ -68,7 +78,7 @@ class EnhancedBenchmarkRunner:
         """Run code model on the dataset"""
         dataset_name = resolve_dataset_name(dataset_name)
         model_info = f" with model {self.model}" if self.model else ""
-        print(f"\n🚀 Running {self.backend.title()} Code{model_info} on {dataset_name} (limit: {limit})...")
+        log_status(f"INFO Running {self.backend.title()} Code{model_info} on {dataset_name} (limit: {limit})")
 
         cmd = [
             sys.executable,
@@ -80,33 +90,66 @@ class EnhancedBenchmarkRunner:
 
         if self.model:
             cmd.extend(["--model", self.model])
+        if self.backend == "local":
+            if self.agent_command:
+                cmd.extend(["--agent-command", self.agent_command])
+            cmd.extend(["--agent-timeout", str(self.agent_timeout)])
         
         try:
             start_time = time.time()
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=7200)  # 2 hour timeout
+            log_status("Starting inference subprocess; live agent logs will appear below")
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+
+            output_lines = []
+            try:
+                deadline = start_time + 7200
+                while process.poll() is None:
+                    if time.time() > deadline:
+                        raise subprocess.TimeoutExpired(cmd, 7200)
+                    ready, _, _ = select.select([process.stdout], [], [], 0.5)
+                    if ready:
+                        line = process.stdout.readline()
+                        if line:
+                            output_lines.append(line)
+                            print(line, end="", flush=True)
+
+                for line in process.stdout:
+                    output_lines.append(line)
+                    print(line, end="", flush=True)
+                returncode = process.returncode
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+                print("ERROR Inference timed out after 2 hours", flush=True)
+                return None, 7200
+
             execution_time = time.time() - start_time
             
-            if result.returncode != 0:
-                print(f"⚠️ Warning: Inference had issues but continuing...")
-                if result.stderr:
-                    print(f"Stderr: {result.stderr[:500]}")
+            if returncode != 0:
+                log_status("WARN Inference had issues but continuing")
+                if output_lines:
+                    tail = "".join(output_lines[-20:])
+                    print(f"Last inference output:\n{tail}", flush=True)
             
             # Find the latest prediction file
             pred_files = sorted(self.predictions_dir.glob("predictions_*.jsonl"), reverse=True)
             
             if not pred_files:
-                print("❌ No prediction files generated")
+                print("ERROR No prediction files generated")
                 return None, execution_time
                 
             latest_pred = pred_files[0]
-            print(f"✅ Predictions saved to: {latest_pred}")
+            log_status(f"OK Predictions saved to: {latest_pred}")
             return str(latest_pred), execution_time
             
-        except subprocess.TimeoutExpired:
-            print("❌ Inference timed out after 2 hours")
-            return None, 7200
         except Exception as e:
-            print(f"❌ Error during inference: {e}")
+            log_status(f"ERROR Error during inference: {e}")
             return None, 0
             
     def calculate_generation_score(self, prediction_file):
@@ -133,7 +176,7 @@ class EnhancedBenchmarkRunner:
     def run_evaluation(self, prediction_file, dataset_name, max_workers=2):
         """Run real SWE-bench evaluation using Docker"""
         dataset_name = resolve_dataset_name(dataset_name)
-        print(f"\n🔬 Running real evaluation on {prediction_file}...")
+        print(f"\nINFO Running real evaluation on {prediction_file}...")
         print("This will test if patches actually fix the issues (takes time)...")
         
         # Prepare predictions for evaluation format
@@ -230,18 +273,18 @@ class EnhancedBenchmarkRunner:
                             total = int(match.group(2)) if len(match.groups()) > 1 else len(predictions)
                             break
                 if resolved is None or total is None:
-                    print("\n⚠️ Could not parse evaluation results")
+                    print("\nWARN Could not parse evaluation results")
                     return None, eval_time
 
             score = (resolved / total) * 100 if total else 0
-            print(f"\n📊 Real Evaluation Score: {score:.2f}% ({resolved}/{total} issues fixed)")
+            print(f"\nReal Evaluation Score: {score:.2f}% ({resolved}/{total} issues fixed)")
             return score, eval_time
                 
         except subprocess.TimeoutExpired:
-            print("\n⚠️ Evaluation timed out")
+            print("\nWARN Evaluation timed out")
             return None, 1800
         except Exception as e:
-            print(f"\n⚠️ Evaluation error: {e}")
+            print(f"\nWARN Evaluation error: {e}")
             return None, 0
 
 def main():
@@ -258,10 +301,27 @@ def main():
                        help="Max parallel Docker containers for evaluation (default: 2)")
     parser.add_argument("--notes", default="",
                        help="Optional notes about this run")
+    parser.add_argument("--model", type=str,
+                       help="Model label to store with this run")
+    parser.add_argument("--backend", type=str, choices=["claude", "codex", "gemini", "local"],
+                       default="claude", help="Code model backend to use")
+    parser.add_argument("--agent-command", dest="agent_command",
+                       help="Local agent command for --backend local")
+    parser.add_argument("--agent-timeout", dest="agent_timeout", type=int, default=600,
+                       help="Local agent timeout in seconds")
     
     args = parser.parse_args()
+
+    if args.backend == "local" and not args.agent_command:
+        print("Error: --agent-command is required when using --backend local")
+        return
     
-    runner = EnhancedBenchmarkRunner()
+    runner = EnhancedBenchmarkRunner(
+        model=args.model,
+        backend=args.backend,
+        agent_command=args.agent_command,
+        agent_timeout=args.agent_timeout,
+    )
     
     print("="*60)
     print("Enhanced SWE-bench Benchmark Runner")
@@ -272,12 +332,12 @@ def main():
     print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
     # Run inference
-    print("\nPhase 1: Generating patches with Claude Code...")
+    print(f"\nPhase 1: Generating patches with {runner.backend.title()} Code...")
     start_time = time.time()
     prediction_file, generation_time = runner.run_inference(args.dataset, args.limit)
     
     if not prediction_file:
-        print("❌ Failed to generate predictions")
+        print("ERROR Failed to generate predictions")
         runner.log_result(
             args.dataset, args.limit, 0.0, None, generation_time, 0,
             None, f"Failed to generate predictions. {args.notes}", "failed"
@@ -286,7 +346,7 @@ def main():
     
     # Calculate generation score
     generation_score, total_instances = runner.calculate_generation_score(prediction_file)
-    print(f"\n📈 Generation Score: {generation_score:.2f}% ({int(generation_score * total_instances / 100)}/{total_instances} patches generated)")
+    print(f"\nGeneration Score: {generation_score:.2f}% ({int(generation_score * total_instances / 100)}/{total_instances} patches generated)")
     
     # Run evaluation if not skipped
     evaluation_score = None
@@ -324,7 +384,7 @@ def main():
     
     if evaluation_status == "completed":
         print(f"Evaluation Score: {evaluation_score:.2f}% (issues actually fixed) ← REAL SCORE")
-        print(f"\n🎯 Real Success Rate: {evaluation_score:.2f}%")
+        print(f"\nReal Success Rate: {evaluation_score:.2f}%")
     elif evaluation_status == "skipped":
         print("Evaluation: SKIPPED (use without --skip-eval for real scores)")
     else:
@@ -338,7 +398,7 @@ def main():
     print(f"\nResults logged to: {runner.log_file}")
     
     # Show recent scores
-    print("\n📊 Recent runs:")
+    print("\nRecent runs:")
     if runner.log_file.exists():
         with open(runner.log_file, 'r') as f:
             lines = f.readlines()

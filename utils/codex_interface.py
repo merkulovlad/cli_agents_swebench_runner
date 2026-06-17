@@ -1,6 +1,7 @@
 import os
 import subprocess
 from typing import Dict, List
+from utils.status import log_status
 
 class CodexCodeInterface:
     """Interface for interacting with the Codex CLI."""
@@ -51,6 +52,7 @@ class CodexCodeInterface:
             cmd = ["codex"]
             if model:
                 cmd.extend(["--model", model])
+            log_status(f"Codex CLI started in {cwd}; waiting for model response")
             result = subprocess.run(
                 cmd,
                 input=prompt,
@@ -59,6 +61,7 @@ class CodexCodeInterface:
                 timeout=600,
                 env=self._build_env(),
             )
+            log_status(f"Codex CLI finished with exit code {result.returncode}")
             os.chdir(original_cwd)
             return {
                 "success": result.returncode == 0,

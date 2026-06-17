@@ -1,6 +1,7 @@
 import os
 import subprocess
 from typing import Dict, List
+from utils.status import log_status
 
 class GeminiCodeInterface:
     """Interface for interacting with the Google Gemini CLI."""
@@ -58,6 +59,7 @@ class GeminiCodeInterface:
                 cmd.extend(["--model", model])
 
             # Execute gemini command with the prompt via stdin
+            log_status(f"Gemini CLI started in {cwd}; waiting for model response")
             result = subprocess.run(
                 cmd,
                 input=prompt,
@@ -66,6 +68,7 @@ class GeminiCodeInterface:
                 timeout=600,  # 10 minute timeout
                 env=self._build_env(),
             )
+            log_status(f"Gemini CLI finished with exit code {result.returncode}")
 
             os.chdir(original_cwd)
 

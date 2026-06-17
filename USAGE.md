@@ -2,7 +2,7 @@
 
 ## Quick Start
 
-The `swe_bench.py` tool combines all benchmark functionality into one command and supports Claude Code, Codex, and Gemini backends.
+The `swe_bench.py` tool combines all benchmark functionality into one command and supports Claude Code, Codex, Gemini, and local agent backends.
 
 ### Common Commands
 
@@ -60,9 +60,31 @@ python swe_bench.py run --dataset multilingual --limit 10
 python swe_bench.py run --quick --backend codex
 # Use Gemini backend
 python swe_bench.py run --quick --backend gemini
+
+# Use a local agent command
+python swe_bench.py run --limit 5 --backend local --agent-command "supercode"
 ```
 
 Supported dataset aliases are `lite`, `verified`, `full`, `multimodal`, and `multilingual`. You can also pass a full Hugging Face dataset ID to `--dataset`.
+
+### Local Agent Backend
+
+Use `--backend local` when you already have an agent CLI that talks to vLLM, an OpenAI-compatible endpoint, or any other model server.
+
+```bash
+python swe_bench.py run \
+  --backend local \
+  --agent-command "supercode --config swebench.yaml" \
+  --agent-timeout 900 \
+  --limit 10
+```
+
+The local agent contract is:
+
+- The command runs with `cwd` set to the checked-out SWE-bench repository.
+- The issue prompt is passed to the command on `stdin`.
+- The agent should edit files in that repository and then exit with code `0`.
+- The runner captures the patch with `git diff HEAD`; stdout may contain logs or any other agent output.
 
 ### Model Selection
 

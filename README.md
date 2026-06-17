@@ -29,6 +29,7 @@ For detailed setup instructions, see [Prerequisites](#prerequisites) and [Instal
 python swe_bench.py run --limit 1               # Claude Code (default)
 python swe_bench.py run --limit 1 --backend codex  # Codex
 python swe_bench.py run --limit 1 --backend gemini # Gemini
+python swe_bench.py run --limit 1 --backend local --agent-command "supercode" # Local agent
 
 # 2. Check your results
 python swe_bench.py check
@@ -165,6 +166,10 @@ python swe_bench.py run --model best --quick       # Best performance alias
 # Performance options
 python swe_bench.py run --quick --no-eval          # Skip Docker evaluation
 python swe_bench.py run --limit 20 --max-workers 4 # More parallel containers
+
+# Local agent backend
+python swe_bench.py run --backend local --agent-command "supercode" --limit 5
+python swe_bench.py run --backend local --agent-command "supercode --config swebench.yaml" --agent-timeout 900 --limit 5
 
 # Dataset selection
 python swe_bench.py run --dataset lite --limit 10

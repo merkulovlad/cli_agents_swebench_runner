@@ -2,6 +2,12 @@
 # Outputs
 *_output.txt
 output.txt
+results/*
+!results/.gitkeep
+predictions/*
+!predictions/.gitkeep
+evaluation_results/*
+!evaluation_results/.gitkeep
 
 # Env
 .env
