@@ -2,22 +2,34 @@
 
 ## Purpose
 
-This project provides an empirical framework for measuring the performance of code-focused language models like Claude Code, Codex, and Gemini on real-world software engineering tasks. It was built to provide objective, reproducible metrics that allow users to assess these tools for themselves, rather than relying on anecdotal reports or marketing claims.
+This project provides an empirical framework for measuring the performance of code-focused agents like Claude Code, Codex, Gemini, and local/custom agents on real-world software engineering tasks. It was built to provide objective, reproducible metrics that allow users to assess these tools for themselves, rather than relying on anecdotal reports or marketing claims.
 
 The SWE-bench benchmark presents the model with actual GitHub issues from popular open-source projects and measures its ability to generate patches that successfully resolve these issues. This provides a concrete, measurable answer to the question: "How well do these code models actually perform on real software engineering tasks?"
 
 > **Platform support:** The tools in this repository run on Linux, macOS, and Windows (including WSL). Replace `python` with `python3` on Unix-like systems or `py` on Windows if needed.
 
+## Acknowledgements
+
+This project started from the original work by [jimmc414](https://github.com/jimmc414/claudecode_gemini_and_codex_swebench) and is now maintained as an independent extension.
+
+Changes:
+- Added dataset alias support.
+- Added a local/custom agent backend.
+- Added API/proxy configuration support.
+- Improved runtime logging and timeout configuration.
+- Fixed partial-run evaluation scoring.
+
 ## Getting Started in 5 Minutes
 
 ```bash
-# Assuming you have Python, a code model CLI (Claude or Codex), and Docker installed:
-# Replace `python` with `python3` on Linux/macOS or `py` on Windows if needed.
-git clone https://github.com/jimmc414/claudecode_n_codex_swebench.git
-cd claudecode_n_codex_swebench
+# Assuming you have Python, a code model CLI, and Docker installed:
+git clone https://github.com/merkulovlad/cli_agents_swebench_runner.git
+cd cli_agents_swebench_runner
+python3 -m venv .venv
+source .venv/bin/activate
 python -m pip install -r requirements.txt
 python swe_bench.py run --limit 1  # Run your first test (~10 min)
-python swe_bench.py check           # See your results
+python swe_bench.py scores         # See your results
 ```
 
 For detailed setup instructions, see [Prerequisites](#prerequisites) and [Installation](#installation) below.
@@ -32,7 +44,7 @@ python swe_bench.py run --limit 1 --backend gemini # Gemini
 python swe_bench.py run --limit 1 --backend local --agent-command "supercode" # Local agent
 
 # 2. Check your results
-python swe_bench.py check
+python swe_bench.py scores
 
 # 3. Try a larger test when ready (10 instances, ~2 hours)
 python swe_bench.py quick
@@ -48,7 +60,7 @@ Before starting, ensure you have:
    python --version  # or python3/py --version
    ```
 
-2. **Claude Code, Codex, or Gemini CLI installed and logged in**
+2. **Claude Code, Codex, Gemini CLI, or a local/custom agent installed**
    ```bash
    # Claude Code
    claude --version  # Should work without errors
@@ -81,6 +93,17 @@ Before starting, ensure you have:
    export API="your-api-key"
    ```
 
+   Local proxy example for Claude-compatible endpoints:
+   ```bash
+   ANTHROPIC_BASE_URL="http://localhost:8082" \
+   ANTHROPIC_API_KEY="any-value" \
+   python run_benchmark_with_eval.py \
+     --backend claude \
+     --model claude-3-5-sonnet-20241022 \
+     --dataset lite \
+     --limit 10
+   ```
+
 3. **Docker installed and running**
    ```bash
    docker --version  # Should show version
@@ -102,10 +125,12 @@ Before starting, ensure you have:
 ```bash
 # 1. Clone this repository
 git clone <repository-url>
-cd claudecode_n_codex_swebench
+cd cli_agents_swebench_runner
 
 # 2. Install all Python dependencies (includes swebench)
-python -m pip install -r requirements.txt  # Use python3/py as needed
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 
 # 3. Verify everything is working
 python swe_bench.py list-models               # Claude models
@@ -142,7 +167,7 @@ python swe_bench.py
 # Quick commands
 python swe_bench.py quick          # 10 instances with evaluation
 python swe_bench.py full           # 300 instances with evaluation
-python swe_bench.py check          # View scores and statistics
+python swe_bench.py scores         # View scores and statistics
 python swe_bench.py list-models    # Show available models (Claude by default)
 python swe_bench.py list-models --backend codex  # Show Codex models
 python swe_bench.py list-models --backend gemini # Show Gemini models
@@ -166,6 +191,7 @@ python swe_bench.py run --model best --quick       # Best performance alias
 # Performance options
 python swe_bench.py run --quick --no-eval          # Skip Docker evaluation
 python swe_bench.py run --limit 20 --max-workers 4 # More parallel containers
+python swe_bench.py run --limit 10 --inference-timeout 21600 # 6 hour generation timeout
 
 # Local agent backend
 python swe_bench.py run --backend local --agent-command "supercode" --limit 5
@@ -230,6 +256,8 @@ python swe_bench.py eval --last 5
 # Preview without running
 python swe_bench.py eval --last 3 --dry-run
 ```
+
+Partial prediction files are scored against submitted/completed instances, not the full dataset size. For example, if 9 predictions are submitted and 5 resolve, the evaluation score is `5/9`, not `5/300`.
 
 ### Viewing Scores
 
@@ -311,15 +339,18 @@ Based on empirical testing with SWE-bench:
 ## Project Structure
 
 ```
-claudecode_n_codex_swebench/
+cli_agents_swebench_runner/
 ├── swe_bench.py              # Main unified tool (all commands)
-├── code_swe_agent.py         # Core agent for Claude Code or Codex
+├── code_swe_agent.py         # Core agent for Claude Code, Codex, Gemini, or local agents
 ├── USAGE.md                  # Detailed command usage guide
 ├── benchmark_scores.log      # Results log (JSON lines format)
 ├── requirements.txt          # Python dependencies
 │
 ├── utils/                    # Core utilities
 │   ├── claude_interface.py  # Claude Code CLI interface
+│   ├── codex_interface.py   # Codex CLI interface
+│   ├── gemini_interface.py  # Gemini CLI interface
+│   ├── local_interface.py   # Local/custom agent command interface
 │   ├── prompt_formatter.py  # Formats issues into prompts
 │   ├── patch_extractor.py   # Extracts patches from responses
 │   └── model_registry.py    # Model definitions and aliases
@@ -329,10 +360,9 @@ claudecode_n_codex_swebench/
 │   ├── chain_of_thought_prompt.txt
 │   └── react_style_prompt.txt
 │
-├── predictions/              # Generated predictions (JSONL)
-├── results/                  # Detailed Claude outputs
-├── evaluation_results/       # Docker evaluation results
-└── backup/                   # Archived/unused files
+├── predictions/              # Generated predictions (JSONL, ignored except .gitkeep)
+├── results/                  # Detailed model outputs (ignored except .gitkeep)
+└── evaluation_results/       # Docker evaluation results (ignored except .gitkeep)
 ```
 
 ## Verification Checklist
@@ -350,7 +380,7 @@ python swe_bench.py run --limit 1 --no-eval
 python swe_bench.py quick
 
 # 4. Check scores (should show real evaluation scores)
-python swe_bench.py check
+python swe_bench.py scores
 
 # 5. If scores look good, try larger test
 python swe_bench.py run --standard  # 50 instances
