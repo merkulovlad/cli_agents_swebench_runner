@@ -196,7 +196,7 @@ class CodeSWEAgent:
             json.dump({
                 "instance_id": instance_id,
                 "timestamp": timestamp,
-                "claude_output": result,
+                "model_output": result,
                 "extracted_patch": patch
             }, f, indent=2)
             
