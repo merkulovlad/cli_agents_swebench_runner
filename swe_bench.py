@@ -44,6 +44,7 @@ def run_command(args):
         backend=args.backend if hasattr(args, 'backend') and args.backend else DEFAULT_BACKEND,
         agent_command=args.agent_command if hasattr(args, 'agent_command') else None,
         agent_timeout=args.agent_timeout if hasattr(args, 'agent_timeout') else 600,
+        inference_timeout=args.inference_timeout if hasattr(args, 'inference_timeout') else 21600,
     )
 
     if runner.backend == "local" and not runner.agent_command:
@@ -399,6 +400,8 @@ Examples:
     run_parser.add_argument('--backend', type=str, choices=['claude', 'codex', 'gemini', 'local'], help='Code model backend')
     run_parser.add_argument('--agent-command', dest='agent_command', help='Local agent command for --backend local')
     run_parser.add_argument('--agent-timeout', dest='agent_timeout', type=int, default=600, help='Local agent timeout in seconds')
+    run_parser.add_argument('--inference-timeout', dest='inference_timeout', type=int, default=21600,
+                            help='Overall inference timeout in seconds (default: 21600 / 6 hours)')
     
     # EVAL command
     eval_parser = subparsers.add_parser('eval', help='Evaluate past predictions')

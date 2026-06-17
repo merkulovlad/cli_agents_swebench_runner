@@ -25,7 +25,14 @@ def log_status(message):
 
 
 class EnhancedBenchmarkRunner:
-    def __init__(self, model=None, backend="claude", agent_command=None, agent_timeout=600):
+    def __init__(
+        self,
+        model=None,
+        backend="claude",
+        agent_command=None,
+        agent_timeout=600,
+        inference_timeout=21600,
+    ):
         self.base_dir = Path.cwd()
         self.log_file = self.base_dir / "benchmark_scores.log"
         self.predictions_dir = self.base_dir / "predictions"
@@ -35,6 +42,7 @@ class EnhancedBenchmarkRunner:
         self.backend = backend
         self.agent_command = agent_command
         self.agent_timeout = agent_timeout
+        self.inference_timeout = inference_timeout
         
         # Create directories
         self.predictions_dir.mkdir(exist_ok=True)
@@ -108,10 +116,10 @@ class EnhancedBenchmarkRunner:
 
             output_lines = []
             try:
-                deadline = start_time + 7200
+                deadline = start_time + self.inference_timeout
                 while process.poll() is None:
                     if time.time() > deadline:
-                        raise subprocess.TimeoutExpired(cmd, 7200)
+                        raise subprocess.TimeoutExpired(cmd, self.inference_timeout)
                     ready, _, _ = select.select([process.stdout], [], [], 0.5)
                     if ready:
                         line = process.stdout.readline()
@@ -126,8 +134,9 @@ class EnhancedBenchmarkRunner:
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
-                print("ERROR Inference timed out after 2 hours", flush=True)
-                return None, 7200
+                timeout_hours = self.inference_timeout / 3600
+                print(f"ERROR Inference timed out after {timeout_hours:g} hours", flush=True)
+                return None, self.inference_timeout
 
             execution_time = time.time() - start_time
             
@@ -309,6 +318,8 @@ def main():
                        help="Local agent command for --backend local")
     parser.add_argument("--agent-timeout", dest="agent_timeout", type=int, default=600,
                        help="Local agent timeout in seconds")
+    parser.add_argument("--inference-timeout", dest="inference_timeout", type=int, default=21600,
+                       help="Overall inference timeout in seconds (default: 21600 / 6 hours)")
     
     args = parser.parse_args()
 
@@ -321,6 +332,7 @@ def main():
         backend=args.backend,
         agent_command=args.agent_command,
         agent_timeout=args.agent_timeout,
+        inference_timeout=args.inference_timeout,
     )
     
     print("="*60)
