@@ -33,10 +33,12 @@ from run_benchmark_with_eval import EnhancedBenchmarkRunner
 from evaluate_predictions import PredictionEvaluator
 from show_scores import ScoreViewer
 from utils.model_registry import list_models, get_model_name
+from utils.dataset_registry import list_datasets, resolve_dataset_name
 from code_swe_agent import DEFAULT_BACKEND
 
 def run_command(args):
     """Handle 'run' subcommand - run new benchmarks"""
+    args.dataset = resolve_dataset_name(args.dataset)
     runner = EnhancedBenchmarkRunner(
         model=args.model if hasattr(args, 'model') else None,
         backend=args.backend if hasattr(args, 'backend') and args.backend else DEFAULT_BACKEND,
@@ -141,6 +143,7 @@ def run_command(args):
 
 def eval_command(args):
     """Handle 'eval' subcommand - evaluate past predictions"""
+    args.dataset = resolve_dataset_name(args.dataset)
     # Check if swebench is installed for evaluation
     if not check_swebench_installed():
         return 1
@@ -334,6 +337,13 @@ def list_models_command(args):
     print()
     return 0
 
+def list_datasets_command(args):
+    """List available dataset aliases."""
+    print()
+    print(list_datasets())
+    print()
+    return 0
+
 def main():
     parser = argparse.ArgumentParser(
         description="Unified SWE-bench Command Line Tool",
@@ -358,6 +368,10 @@ Examples:
   # Run with specific model
   python swe_bench.py run --model opus-4.1 --quick
   python swe_bench.py run --model sonnet-3.7 --limit 20
+
+  # Run with a dataset alias
+  python swe_bench.py run --dataset verified --limit 10
+  python swe_bench.py list-datasets
         """
     )
     
@@ -371,7 +385,8 @@ Examples:
     run_parser.add_argument('--standard', action='store_true', help='Standard test (50 instances)')
     run_parser.add_argument('--full', action='store_true', help='Full test (300 instances)')
     run_parser.add_argument('--no-eval', action='store_true', help='Skip Docker evaluation')
-    run_parser.add_argument('--dataset', default='princeton-nlp/SWE-bench_Lite', help='Dataset to use')
+    run_parser.add_argument('--dataset', default='lite',
+                            help='Dataset alias or Hugging Face ID (default: lite)')
     run_parser.add_argument('--max-workers', type=int, default=2, help='Max parallel Docker containers')
     run_parser.add_argument('--notes', default='', help='Optional notes about this run')
     run_parser.add_argument('--model', type=str, help='Model to use (e.g., opus-4.1, codex-4.2)')
@@ -386,7 +401,8 @@ Examples:
     eval_group.add_argument('--last', type=int, help='Last N prediction files')
     eval_group.add_argument('--pattern', type=str, help='Files matching pattern')
     eval_group.add_argument('--interactive', action='store_true', help='Interactive selection (default)')
-    eval_parser.add_argument('--dataset', default='princeton-nlp/SWE-bench_Lite', help='Dataset name')
+    eval_parser.add_argument('--dataset', default='lite',
+                             help='Dataset alias or Hugging Face ID (default: lite)')
     eval_parser.add_argument('--max-workers', type=int, default=2, help='Max parallel Docker containers')
     eval_parser.add_argument('--dry-run', action='store_true', help='Show what would be evaluated')
     eval_parser.add_argument('--no-update-log', action='store_true', help="Don't update log file")
@@ -408,6 +424,7 @@ Examples:
     subparsers.add_parser('check', help='Check scores (stats + pending)')
     list_parser = subparsers.add_parser('list-models', help='List available models')
     list_parser.add_argument('--backend', type=str, choices=['claude', 'codex', 'gemini'], help='Backend to list')
+    subparsers.add_parser('list-datasets', help='List available dataset aliases')
     
     args = parser.parse_args()
     
@@ -416,7 +433,7 @@ Examples:
         args.command = 'run'
         args.limit = 300
         args.no_eval = False
-        args.dataset = 'princeton-nlp/SWE-bench_Lite'
+        args.dataset = 'lite'
         args.max_workers = 2
         args.notes = 'Full benchmark (default)'
         args.quick = False
@@ -438,7 +455,7 @@ Examples:
         class QuickArgs:
             limit = 10
             no_eval = False
-            dataset = 'princeton-nlp/SWE-bench_Lite'
+            dataset = 'lite'
             max_workers = 2
             notes = 'Quick test'
             quick = True
@@ -451,7 +468,7 @@ Examples:
         class FullArgs:
             limit = 300
             no_eval = False
-            dataset = 'princeton-nlp/SWE-bench_Lite'
+            dataset = 'lite'
             max_workers = 2
             notes = 'Full benchmark'
             quick = False
@@ -471,6 +488,8 @@ Examples:
         return scores_command(CheckArgs())
     elif args.command == 'list-models':
         return list_models_command(args)
+    elif args.command == 'list-datasets':
+        return list_datasets_command(args)
     else:
         parser.print_help()
         return 1

@@ -145,6 +145,7 @@ python swe_bench.py check          # View scores and statistics
 python swe_bench.py list-models    # Show available models (Claude by default)
 python swe_bench.py list-models --backend codex  # Show Codex models
 python swe_bench.py list-models --backend gemini # Show Gemini models
+python swe_bench.py list-datasets  # Show available dataset aliases
 ```
 
 ### Running Benchmarks
@@ -166,8 +167,15 @@ python swe_bench.py run --quick --no-eval          # Skip Docker evaluation
 python swe_bench.py run --limit 20 --max-workers 4 # More parallel containers
 
 # Dataset selection
+python swe_bench.py run --dataset lite --limit 10
+python swe_bench.py run --dataset verified --limit 10
+python swe_bench.py run --dataset full --limit 10
+python swe_bench.py run --dataset multimodal --limit 10
+python swe_bench.py run --dataset multilingual --limit 10
 python swe_bench.py run --dataset princeton-nlp/SWE-bench_Lite --limit 10
 ```
+
+Supported aliases are `lite`, `verified`, `full`, `multimodal`, and `multilingual`. You can also pass a full Hugging Face dataset ID.
 
 ### Running Specific Test Instances
 
