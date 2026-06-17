@@ -16,6 +16,7 @@ from pathlib import Path
 import jsonlines
 from typing import List, Tuple
 import logging
+from utils.dataset_registry import resolve_dataset_name
 
 class PredictionEvaluator:
     def __init__(self):
@@ -151,6 +152,7 @@ class PredictionEvaluator:
     def evaluate_file(self, prediction_file: Path, dataset_name="princeton-nlp/SWE-bench_Lite",
                       max_workers=2, update_log=True, force=False) -> Tuple[float, float]:
         """Evaluate a single prediction file"""
+        dataset_name = resolve_dataset_name(dataset_name)
         print(f"\n{'='*70}")
         print(f"Evaluating: {prediction_file.name}")
         print(f"{'='*70}")
@@ -337,8 +339,8 @@ def main():
                       help="Interactive selection mode (default)")
     
     # Other options
-    parser.add_argument("--dataset", default="princeton-nlp/SWE-bench_Lite",
-                       help="Dataset name")
+    parser.add_argument("--dataset", default="lite",
+                       help="Dataset alias or Hugging Face ID")
     parser.add_argument("--max-workers", type=int, default=2,
                        help="Max parallel Docker containers")
     parser.add_argument("--dry-run", action="store_true",

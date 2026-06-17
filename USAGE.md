@@ -47,11 +47,22 @@ python swe_bench.py run --quick --no-eval
 
 # More parallel Docker workers
 python swe_bench.py run --limit 20 --max-workers 4
+
+# Dataset aliases
+python swe_bench.py list-datasets
+python swe_bench.py run --dataset lite --limit 10
+python swe_bench.py run --dataset verified --limit 10
+python swe_bench.py run --dataset full --limit 10
+python swe_bench.py run --dataset multimodal --limit 10
+python swe_bench.py run --dataset multilingual --limit 10
+
 # Use Codex backend
 python swe_bench.py run --quick --backend codex
 # Use Gemini backend
 python swe_bench.py run --quick --backend gemini
 ```
+
+Supported dataset aliases are `lite`, `verified`, `full`, `multimodal`, and `multilingual`. You can also pass a full Hugging Face dataset ID to `--dataset`.
 
 ### Model Selection
 

@@ -14,6 +14,7 @@ from pathlib import Path
 import logging
 import jsonlines
 from datasets import load_dataset
+from utils.dataset_registry import resolve_dataset_name
 
 class EnhancedBenchmarkRunner:
     def __init__(self, model=None, backend="claude"):
@@ -65,6 +66,7 @@ class EnhancedBenchmarkRunner:
             
     def run_inference(self, dataset_name, limit):
         """Run code model on the dataset"""
+        dataset_name = resolve_dataset_name(dataset_name)
         model_info = f" with model {self.model}" if self.model else ""
         print(f"\n🚀 Running {self.backend.title()} Code{model_info} on {dataset_name} (limit: {limit})...")
 
@@ -130,6 +132,7 @@ class EnhancedBenchmarkRunner:
         
     def run_evaluation(self, prediction_file, dataset_name, max_workers=2):
         """Run real SWE-bench evaluation using Docker"""
+        dataset_name = resolve_dataset_name(dataset_name)
         print(f"\n🔬 Running real evaluation on {prediction_file}...")
         print("This will test if patches actually fix the issues (takes time)...")
         
@@ -245,8 +248,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="Run SWE-bench benchmark with real evaluation scores"
     )
-    parser.add_argument("--dataset", default="princeton-nlp/SWE-bench_Lite", 
-                       help="Dataset to use")
+    parser.add_argument("--dataset", default="lite",
+                       help="Dataset alias or Hugging Face ID")
     parser.add_argument("--limit", type=int, default=5,
                        help="Number of instances to test (default: 5)")
     parser.add_argument("--skip-eval", action="store_true",

@@ -24,6 +24,7 @@ from utils.gemini_interface import GeminiCodeInterface
 from utils.prompt_formatter import PromptFormatter
 from utils.patch_extractor import PatchExtractor
 from utils.model_registry import get_model_name
+from utils.dataset_registry import resolve_dataset_name
 
 
 DEFAULT_BACKEND = os.environ.get("CODE_SWE_BACKEND", "claude")
@@ -203,6 +204,7 @@ class CodeSWEAgent:
     def run_on_dataset(self, dataset_name: str, split: str = "test",
                       limit: Optional[int] = None) -> List[Dict]:
         """Run on a full dataset."""
+        dataset_name = resolve_dataset_name(dataset_name)
         print(f"Loading dataset: {dataset_name}")
         dataset = load_dataset(dataset_name, split=split)
         
@@ -234,6 +236,7 @@ class CodeSWEAgent:
     
     def run_on_instance(self, instance_id: str, dataset_name: str = "princeton-nlp/SWE-bench_Lite") -> Dict:
         """Run on a single instance by ID."""
+        dataset_name = resolve_dataset_name(dataset_name)
         dataset = load_dataset(dataset_name, split="test")
         
         # Find the instance
@@ -260,8 +263,8 @@ class CodeSWEAgent:
 def main():
     parser = argparse.ArgumentParser(description="Run code models on SWE-bench")
     parser.add_argument("--dataset_name", type=str,
-                       default="princeton-nlp/SWE-bench_Lite",
-                       help="Dataset to use")
+                       default="lite",
+                       help="Dataset alias or Hugging Face ID")
     parser.add_argument("--instance_id", type=str,
                        help="Run on a specific instance ID")
     parser.add_argument("--limit", type=int,
