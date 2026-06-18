@@ -10,6 +10,7 @@ import sys
 import subprocess
 import tempfile
 import shutil
+import time
 from datetime import datetime
 from typing import List, Dict, Optional
 from pathlib import Path
@@ -143,6 +144,7 @@ class CodeSWEAgent:
                 "error": "Failed to set up repository",
             }
 
+        task_started = time.perf_counter()
         try:
             log_status(f"{instance_id}: formatting prompt")
             prompt = self.prompt_formatter.format_for_cli(instance)
@@ -164,6 +166,7 @@ class CodeSWEAgent:
                     "model": self.model_alias or f"{self.backend}-code",
                     "prediction": "",
                     "error": f"Execution failed: {result['stderr']}",
+                    "task_time_seconds": time.perf_counter() - task_started,
                 }
 
             log_status(f"{instance_id}: model response received; extracting patch")
@@ -179,8 +182,10 @@ class CodeSWEAgent:
             prediction = self.patch_extractor.format_for_swebench(
                 patch, instance_id, self.model_alias or f"{self.backend}-code"
             )
+            task_time = time.perf_counter() - task_started
+            prediction["task_time_seconds"] = task_time
 
-            self._save_result(instance_id, result, patch)
+            self._save_result(instance_id, result, patch, task_time)
             log_status(f"{instance_id}: prediction saved")
 
             return prediction
@@ -194,6 +199,7 @@ class CodeSWEAgent:
                 "model": self.model_alias or f"{self.backend}-code",
                 "prediction": "",
                 "error": str(e),
+                "task_time_seconds": time.perf_counter() - task_started,
             }
         finally:
             try:
@@ -221,7 +227,10 @@ class CodeSWEAgent:
             shutil.copytree(session_dir, destination, dirs_exist_ok=True)
         log_status(f"{instance_id}: copied agent sessions to {destination}")
 
-    def _save_result(self, instance_id: str, result: Dict, patch: str):
+    def _save_result(
+        self, instance_id: str, result: Dict, patch: str,
+        task_time_seconds: Optional[float] = None,
+    ):
         """Save detailed results for debugging."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         result_file = self.results_dir / f"{instance_id}_{timestamp}.json"
@@ -230,6 +239,7 @@ class CodeSWEAgent:
             json.dump({
                 "instance_id": instance_id,
                 "timestamp": timestamp,
+                "task_time_seconds": task_time_seconds,
                 "model_output": result,
                 "extracted_patch": patch
             }, f, indent=2)

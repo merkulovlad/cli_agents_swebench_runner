@@ -19,7 +19,9 @@ def test_save_result_uses_backend_neutral_model_output_key(tmp_path):
         "returncode": 0,
     }
 
-    agent._save_result("django__django-11133", result, "diff --git a/file.py b/file.py")
+    agent._save_result(
+        "django__django-11133", result, "diff --git a/file.py b/file.py", 12.5
+    )
 
     saved_files = list(tmp_path.glob("django__django-11133_*.json"))
     with open(saved_files[0]) as f:
@@ -30,12 +32,14 @@ def test_save_result_uses_backend_neutral_model_output_key(tmp_path):
         "model_output": saved.get("model_output"),
         "claude_output": saved.get("claude_output"),
         "extracted_patch": saved.get("extracted_patch"),
+        "task_time_seconds": saved.get("task_time_seconds"),
     }
     expected = {
         "file_count": 1,
         "model_output": result,
         "claude_output": None,
         "extracted_patch": "diff --git a/file.py b/file.py",
+        "task_time_seconds": 12.5,
     }
 
     assert observed == expected
@@ -117,10 +121,11 @@ def test_process_instance_returns_execution_error_and_cleans_repo(tmp_path):
     }
     agent._copy_agent_sessions = Mock()
 
-    with patch("code_swe_agent.os.getcwd", return_value="/original"):
-        with patch("code_swe_agent.os.chdir") as chdir_mock:
-            with patch("code_swe_agent.subprocess.run"):
-                result = agent.process_instance({"instance_id": "django__django-11133"})
+    with patch("code_swe_agent.time.perf_counter", side_effect=[10.0, 15.0]):
+        with patch("code_swe_agent.os.getcwd", return_value="/original"):
+            with patch("code_swe_agent.os.chdir") as chdir_mock:
+                with patch("code_swe_agent.subprocess.run"):
+                    result = agent.process_instance({"instance_id": "django__django-11133"})
 
     observed = {
         "result": result,
@@ -134,6 +139,7 @@ def test_process_instance_returns_execution_error_and_cleans_repo(tmp_path):
             "model": "codex-alias",
             "prediction": "",
             "error": "Execution failed: boom",
+            "task_time_seconds": 5.0,
         },
         "repo_exists": False,
         "copy_sessions_call": ("django__django-11133", str(repo_path)),
@@ -172,10 +178,11 @@ def test_process_instance_formats_valid_prediction_and_saves_result(tmp_path):
     agent._save_result = Mock()
     agent._copy_agent_sessions = Mock()
 
-    with patch("code_swe_agent.os.getcwd", return_value="/original"):
-        with patch("code_swe_agent.os.chdir") as chdir_mock:
-            with patch("code_swe_agent.subprocess.run") as run_mock:
-                result = agent.process_instance({"instance_id": "django__django-11133"})
+    with patch("code_swe_agent.time.perf_counter", side_effect=[10.0, 15.0]):
+        with patch("code_swe_agent.os.getcwd", return_value="/original"):
+            with patch("code_swe_agent.os.chdir") as chdir_mock:
+                with patch("code_swe_agent.subprocess.run") as run_mock:
+                    result = agent.process_instance({"instance_id": "django__django-11133"})
 
     observed = {
         "result": result,
@@ -194,6 +201,7 @@ def test_process_instance_formats_valid_prediction_and_saves_result(tmp_path):
             "instance_id": "django__django-11133",
             "model": "sonnet",
             "prediction": "valid patch",
+            "task_time_seconds": 5.0,
         },
         "prompt_call": ({"instance_id": "django__django-11133"},),
         "execute_call": ("prompt", str(repo_path), "claude-model"),
@@ -208,6 +216,7 @@ def test_process_instance_formats_valid_prediction_and_saves_result(tmp_path):
                 "returncode": 0,
             },
             "valid patch",
+            5.0,
         ),
         "git_calls": [
             (["git", "add", "-A"],),

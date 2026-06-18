@@ -432,6 +432,10 @@ python swe_bench.py run --quick --max-workers 1
 - **evaluation_results/**: Detailed Docker test results
 - **results/**: Raw model outputs and preserved agent session logs for debugging
 
+Each prediction and detailed task result includes `task_time_seconds`, measured
+after repository setup. Benchmark summaries include `total_task_time` and
+`average_task_time`, so repository cloning and checkout time are excluded.
+
 ## Docker Setup
 
 If you don't have Docker installed, here's how to set it up manually:

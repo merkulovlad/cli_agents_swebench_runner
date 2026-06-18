@@ -54,6 +54,15 @@ class EnhancedBenchmarkRunner:
                    prediction_file, notes="", evaluation_status="pending"):
         """Log comprehensive benchmark results"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        task_times = []
+        if prediction_file and Path(prediction_file).exists():
+            with jsonlines.open(prediction_file) as reader:
+                task_times = [
+                    obj["task_time_seconds"] for obj in reader
+                    if isinstance(obj.get("task_time_seconds"), (int, float))
+                ]
+        total_task_time = sum(task_times)
+        average_task_time = total_task_time / len(task_times) if task_times else 0
         
         log_entry = {
             "timestamp": timestamp,
@@ -64,6 +73,8 @@ class EnhancedBenchmarkRunner:
             "evaluation_score": evaluation_score,
             "evaluation_status": evaluation_status,
             "generation_time": generation_time,
+            "total_task_time": total_task_time,
+            "average_task_time": average_task_time,
             "evaluation_time": evaluation_time,
             "model": self.model,
             "backend": self.backend,
@@ -81,6 +92,8 @@ class EnhancedBenchmarkRunner:
         else:
             print(f"   Generation Score: {generation_score:.2f}% (patches created)")
             print(f"   Evaluation: {evaluation_status}")
+        print(f"   Total task time: {total_task_time:.2f}s")
+        print(f"   Average task time: {average_task_time:.2f}s")
             
     def run_inference(self, dataset_name, limit):
         """Run code model on the dataset"""
