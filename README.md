@@ -206,6 +206,11 @@ python swe_bench.py run --dataset multilingual --limit 10
 python swe_bench.py run --dataset princeton-nlp/SWE-bench_Lite --limit 10
 ```
 
+The local backend runs the agent headlessly as
+`supercode -p "<prompt>" -skip-permissions`. Session logs written under a
+hidden agent directory in the checkout are preserved in
+`results/<instance_id>/sessions/`.
+
 Supported aliases are `lite`, `verified`, `full`, `multimodal`, and `multilingual`. You can also pass a full Hugging Face dataset ID.
 
 ### Running Specific Test Instances
@@ -425,7 +430,7 @@ python swe_bench.py run --quick --max-workers 1
 - **benchmark_scores.log**: Main results log (JSON lines)
 - **predictions/**: All generated patches
 - **evaluation_results/**: Detailed Docker test results
-- **results/**: Raw Claude Code outputs for debugging
+- **results/**: Raw model outputs and preserved agent session logs for debugging
 
 ## Docker Setup
 

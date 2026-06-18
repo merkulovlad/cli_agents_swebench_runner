@@ -115,6 +115,7 @@ def test_process_instance_returns_execution_error_and_cleans_repo(tmp_path):
         "stderr": "boom",
         "returncode": 1,
     }
+    agent._copy_agent_sessions = Mock()
 
     with patch("code_swe_agent.os.getcwd", return_value="/original"):
         with patch("code_swe_agent.os.chdir") as chdir_mock:
@@ -124,6 +125,7 @@ def test_process_instance_returns_execution_error_and_cleans_repo(tmp_path):
     observed = {
         "result": result,
         "repo_exists": repo_path.exists(),
+        "copy_sessions_call": agent._copy_agent_sessions.call_args.args,
         "chdir_calls": [call.args for call in chdir_mock.call_args_list],
     }
     expected = {
@@ -134,6 +136,7 @@ def test_process_instance_returns_execution_error_and_cleans_repo(tmp_path):
             "error": "Execution failed: boom",
         },
         "repo_exists": False,
+        "copy_sessions_call": ("django__django-11133", str(repo_path)),
         "chdir_calls": [(str(repo_path),), ("/original",), ("/original",)],
     }
 
@@ -167,6 +170,7 @@ def test_process_instance_formats_valid_prediction_and_saves_result(tmp_path):
         "prediction": "valid patch",
     }
     agent._save_result = Mock()
+    agent._copy_agent_sessions = Mock()
 
     with patch("code_swe_agent.os.getcwd", return_value="/original"):
         with patch("code_swe_agent.os.chdir") as chdir_mock:
@@ -182,6 +186,7 @@ def test_process_instance_formats_valid_prediction_and_saves_result(tmp_path):
         "save_call": agent._save_result.call_args.args,
         "git_calls": [call.args for call in run_mock.call_args_list],
         "repo_exists": repo_path.exists(),
+        "copy_sessions_call": agent._copy_agent_sessions.call_args.args,
         "chdir_calls": [call.args for call in chdir_mock.call_args_list],
     }
     expected = {
@@ -209,10 +214,28 @@ def test_process_instance_formats_valid_prediction_and_saves_result(tmp_path):
             (["git", "stash"],),
         ],
         "repo_exists": False,
+        "copy_sessions_call": ("django__django-11133", str(repo_path)),
         "chdir_calls": [(str(repo_path),), ("/original",)],
     }
 
     assert observed == expected
+
+
+def test_copy_agent_sessions_preserves_logs(tmp_path):
+    repo_path = tmp_path / "repo"
+    sessions_path = repo_path / ".supercode" / "sessions"
+    sessions_path.mkdir(parents=True)
+    (sessions_path / "trace.jsonl").write_text('{"event": "done"}\n')
+    (sessions_path / "transcript.json").write_text('{"result": "ok"}\n')
+
+    agent = CodeSWEAgent.__new__(CodeSWEAgent)
+    agent.results_dir = tmp_path / "results"
+
+    agent._copy_agent_sessions("django__django-11133", str(repo_path))
+
+    saved_sessions = agent.results_dir / "django__django-11133" / "sessions"
+    assert (saved_sessions / "trace.jsonl").read_text() == '{"event": "done"}\n'
+    assert (saved_sessions / "transcript.json").read_text() == '{"result": "ok"}\n'
 
 
 def test_run_on_instance_finds_matching_instance_and_processes_it():

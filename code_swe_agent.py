@@ -202,8 +202,25 @@ class CodeSWEAgent:
                 log_status(f"{instance_id}: warning: could not restore directory: {e}")
 
             if repo_path and os.path.exists(repo_path):
+                self._copy_agent_sessions(instance_id, repo_path)
                 log_status(f"{instance_id}: cleaning up temp checkout")
                 shutil.rmtree(repo_path)
+
+    def _copy_agent_sessions(self, instance_id: str, repo_path: str) -> None:
+        """Preserve session logs from hidden agent directories before cleanup."""
+        session_dirs = [
+            path for path in Path(repo_path).glob(".*/sessions")
+            if path.is_dir()
+        ]
+        if not session_dirs:
+            return
+
+        destination = self.results_dir / instance_id / "sessions"
+        destination.mkdir(parents=True, exist_ok=True)
+        for session_dir in session_dirs:
+            shutil.copytree(session_dir, destination, dirs_exist_ok=True)
+        log_status(f"{instance_id}: copied agent sessions to {destination}")
+
     def _save_result(self, instance_id: str, result: Dict, patch: str):
         """Save detailed results for debugging."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -26,24 +26,20 @@ class LocalAgentInterface:
             )
 
     def execute_code_cli(self, prompt: str, cwd: str, model: str = None) -> Dict[str, Any]:
-        """Run the local agent command with the SWE-bench prompt on stdin."""
+        """Run the local agent command with the SWE-bench prompt as an argument."""
+        command = [*self.command, "-p", prompt, "-skip-permissions"]
         try:
-            original_cwd = os.getcwd()
-            os.chdir(cwd)
-
-            display_command = " ".join(self.command)
+            display_command = " ".join(command)
             log_status(f"Local agent started in {cwd}: {display_command}; waiting for response")
             result = subprocess.run(
-                self.command,
-                input=prompt,
+                command,
+                cwd=cwd,
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
                 env=os.environ.copy(),
             )
             log_status(f"Local agent finished with exit code {result.returncode}")
-
-            os.chdir(original_cwd)
 
             return {
                 "success": result.returncode == 0,
@@ -53,7 +49,6 @@ class LocalAgentInterface:
             }
 
         except subprocess.TimeoutExpired:
-            os.chdir(original_cwd)
             return {
                 "success": False,
                 "stdout": "",
@@ -61,7 +56,6 @@ class LocalAgentInterface:
                 "returncode": -1,
             }
         except Exception as e:
-            os.chdir(original_cwd)
             return {
                 "success": False,
                 "stdout": "",
