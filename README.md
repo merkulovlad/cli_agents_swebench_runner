@@ -41,7 +41,7 @@ For detailed setup instructions, see [Prerequisites](#prerequisites) and [Instal
 python swe_bench.py run --limit 1               # Claude Code (default)
 python swe_bench.py run --limit 1 --backend codex  # Codex
 python swe_bench.py run --limit 1 --backend gemini # Gemini
-python swe_bench.py run --limit 1 --backend local --agent-command "supercode" # Local agent
+python swe_bench.py run --limit 1 --backend local --agent-command "/path/to/agent" # Local agent
 
 # 2. Check your results
 python swe_bench.py scores
@@ -194,8 +194,8 @@ python swe_bench.py run --limit 20 --max-workers 4 # More parallel containers
 python swe_bench.py run --limit 10 --inference-timeout 21600 # 6 hour generation timeout
 
 # Local agent backend
-python swe_bench.py run --backend local --agent-command "supercode" --limit 5
-python swe_bench.py run --backend local --agent-command "supercode --config swebench.yaml" --agent-timeout 900 --limit 5
+python swe_bench.py run --backend local --agent-command "/path/to/agent" --limit 5
+python swe_bench.py run --backend local --agent-command "/path/to/agent --config config.yaml" --agent-timeout 1800 --limit 5
 
 # Dataset selection
 python swe_bench.py run --dataset lite --limit 10
@@ -206,12 +206,79 @@ python swe_bench.py run --dataset multilingual --limit 10
 python swe_bench.py run --dataset princeton-nlp/SWE-bench_Lite --limit 10
 ```
 
-The local backend runs the agent headlessly as
-`supercode -p "<prompt>" -skip-permissions`. Session logs written under a
-hidden agent directory in the checkout are preserved in
-`results/<instance_id>/sessions/`.
-
 Supported aliases are `lite`, `verified`, `full`, `multimodal`, and `multilingual`. You can also pass a full Hugging Face dataset ID.
+
+### Running a Local Agent
+
+The local backend can run any executable or CLI wrapper that follows this
+command-line contract:
+
+```text
+<agent-command> -p "<prompt>" -skip-permissions
+```
+
+The executable must:
+
+1. Be installed and executable on the host.
+2. Be available in `PATH`, or be passed as an absolute path.
+3. Accept the task prompt through the `-p` argument.
+4. Accept `-skip-permissions` for non-interactive execution.
+5. Modify files directly in its current working directory.
+6. Exit with code `0` on success and a non-zero code on failure.
+
+The runner creates a temporary checkout for each SWE-bench instance and starts
+the agent with that checkout as its working directory. The prompt is not sent
+through stdin. Existing agent arguments may be included in `--agent-command`;
+the runner appends `-p`, the generated prompt, and `-skip-permissions`.
+
+First verify the agent itself:
+
+```bash
+/path/to/agent -p "Print the current working directory and exit." -skip-permissions
+```
+
+Then run one instance without Docker evaluation:
+
+```bash
+source .venv/bin/activate
+python swe_bench.py run \
+  --backend local \
+  --agent-command "/path/to/agent" \
+  --agent-timeout 1800 \
+  --inference-timeout 10800 \
+  --limit 1 \
+  --no-eval
+```
+
+Run nine instances with a 30-minute timeout per task and a three-hour timeout
+for the complete inference run:
+
+```bash
+python swe_bench.py run \
+  --backend local \
+  --agent-command "/path/to/agent" \
+  --agent-timeout 1800 \
+  --inference-timeout 10800 \
+  --limit 9 \
+  --no-eval
+```
+
+`--agent-timeout` limits each individual agent process.
+`--inference-timeout` limits the complete generation phase, including repository
+setup and all selected tasks. Remove `--no-eval` to run Docker evaluation after
+generation.
+
+Outputs are written to:
+
+- `predictions/`: incremental JSONL predictions and the final JSON file.
+- `results/<instance_id>_<timestamp>.json`: raw agent output, patch, and task time.
+- `results/<instance_id>/sessions/`: copied session traces, when the agent writes
+  them under `<checkout>/.<agent-name>/sessions/`.
+- `benchmark_scores.log`: run score, total task time, average task time, generation
+  time, and evaluation time.
+
+Task timing starts after repository clone and checkout. Failed and timed-out
+tasks still receive `task_time_seconds` in their prediction record.
 
 ### Running Specific Test Instances
 
